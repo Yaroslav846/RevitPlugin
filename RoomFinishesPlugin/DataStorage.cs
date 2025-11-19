@@ -1,11 +1,10 @@
-﻿using RevitPlugin;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RevitPlugin
+namespace RevitPlugin.RoomFinishesPlugin
 {
     // Статический класс - живет пока запущен Revit
     public static class DataStorage

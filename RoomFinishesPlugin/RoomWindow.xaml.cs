@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.UI;
+using RevitPlugin.RoomFinishesPlugin;
 using System;
 using System.Collections.Generic;
 using System.Linq;

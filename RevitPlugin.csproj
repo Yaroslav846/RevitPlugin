@@ -28,7 +28,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="icon16.png" />
-    <EmbeddedResource Include="icon32.png" />
+    <EmbeddedResource Include="Assets\icon16.png" />
+    <EmbeddedResource Include="Assets\icon32.png" />
   </ItemGroup>
 </Project>
