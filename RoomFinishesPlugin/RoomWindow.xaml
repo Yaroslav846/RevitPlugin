@@ -20,19 +20,15 @@
         <SolidColorBrush x:Key="ScrollThumb" Color="#4E4E50"/>
         <SolidColorBrush x:Key="ScrollThumbHover" Color="#6E6E70"/>
 
-        <!-- Стиль самого "бегунка" -->
+        <!-- Стиль скроллбара -->
         <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
             <Setter Property="OverridesDefaultStyle" Value="true"/>
             <Setter Property="IsTabStop" Value="false"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Thumb}">
-                        <Border x:Name="rectangle"
-                                Background="{StaticResource ScrollThumb}"
-                                CornerRadius="4"
-                                Height="{TemplateBinding Height}"
-                                SnapsToDevicePixels="True"
-                                Width="{TemplateBinding Width}"/>
+                        <Border x:Name="rectangle" Background="{StaticResource ScrollThumb}" CornerRadius="4"
+                                Height="{TemplateBinding Height}" SnapsToDevicePixels="True" Width="{TemplateBinding Width}"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="true">
                                 <Setter Property="Background" TargetName="rectangle" Value="{StaticResource ScrollThumbHover}"/>
@@ -102,10 +98,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DataGridCell">
-                        <Border Padding="{TemplateBinding Padding}" 
-                                Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="0">
+                        <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0">
                             <ContentPresenter/>
                         </Border>
                     </ControlTemplate>
@@ -120,10 +113,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="{StaticResource MainBackground}" 
-            BorderBrush="{StaticResource AccentBlue}" 
-            BorderThickness="1">
-
+    <Border Background="{StaticResource MainBackground}" BorderBrush="{StaticResource AccentBlue}" BorderThickness="1">
         <Grid Margin="15">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -135,7 +125,7 @@
                 <RowDefinition Height="Auto"/>
                 <!-- 3. Кнопки действий -->
                 <RowDefinition Height="Auto"/>
-                <!-- 4. СТАТУС БАР (Было пропущено) -->
+                <!-- 4. Статус -->
             </Grid.RowDefinitions>
 
             <!-- 0. ЗАГОЛОВОК -->
@@ -151,20 +141,14 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-
                     <Button Name="btnCalculate" Content="Рассчитать все ⟳" Click="btnCalculate_Click" Width="150"/>
                     <TextBlock Text="Нажмите для старта расчета" Grid.Column="1" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="Gray" FontStyle="Italic"/>
                 </Grid>
             </Border>
 
             <!-- 2. ТАБЛИЦА -->
-            <DataGrid x:Name="dgRooms" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True"
-                      CanUserSortColumns="True"
-                      BorderThickness="0">
-
-                <!-- МАГИЯ ДЛЯ СКРОЛЛБАРА: Кладем ресурсы прямо внутрь таблицы -->
+            <DataGrid x:Name="dgRooms" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True" BorderThickness="0">
                 <DataGrid.Resources>
-                    <!-- Стиль бегунка -->
                     <Style x:Key="ScrollThumb" TargetType="{x:Type Thumb}">
                         <Setter Property="Template">
                             <Setter.Value>
@@ -174,8 +158,6 @@
                             </Setter.Value>
                         </Setter>
                     </Style>
-
-                    <!-- Стиль самой полосы -->
                     <Style TargetType="{x:Type ScrollBar}">
                         <Setter Property="Width" Value="10"/>
                         <Setter Property="Background" Value="Transparent"/>
@@ -196,12 +178,9 @@
                 </DataGrid.Resources>
 
                 <DataGrid.Columns>
-                    <!-- НОМЕР: Показываем RoomNumber, а сортируем по NumberForSorting -->
                     <DataGridTextColumn Header="№" Binding="{Binding RoomNumber}" SortMemberPath="NumberForSorting" Width="50"/>
-
                     <DataGridTextColumn Header="Имя помещения" Binding="{Binding RoomName}" SortMemberPath="RoomName" Width="*"/>
                     <DataGridTextColumn Header="Высота" Binding="{Binding Height}" SortMemberPath="Height" Width="80"/>
-
                     <DataGridTextColumn Header="Проемы" Binding="{Binding OpeningsCount}" SortMemberPath="OpeningsCount" Width="80">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -209,7 +188,6 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-
                     <DataGridTextColumn Header="Плинтус (м)" Binding="{Binding SkirtingLength}" SortMemberPath="SkirtingLength" Width="100">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -218,7 +196,6 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-
                     <DataGridTextColumn Header="Стены (м²)" Binding="{Binding WallArea}" SortMemberPath="WallArea" Width="100">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -232,16 +209,16 @@
 
             <!-- 3. КНОПКИ ДЕЙСТВИЙ -->
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,15">
+                <!-- НОВАЯ КНОПКА: Сброс 3D -->
+                <Button Name="btnClear" Content="Сброс 3D" Margin="0,0,10,0" Width="100" Height="35" Click="btnClear_Click" IsEnabled="False" BorderBrush="#666" Foreground="#CCC"/>
                 <Button Name="btnHighlight" Content="Показать в 3D" Margin="0,0,10,0" Width="140" Height="35" Click="btnHighlight_Click" IsEnabled="False"/>
                 <Button Name="btnWrite" Content="Записать в Revit" Width="140" Height="35" Click="btnWrite_Click" IsEnabled="False" Background="{StaticResource AccentBlue}" BorderThickness="0"/>
             </StackPanel>
 
-            <!-- 4. СТАТУС БАР (ПРОГРЕСС) -->
+            <!-- 4. СТАТУС БАР -->
             <Grid Grid.Row="4">
-                <ProgressBar Name="pbStatus" Height="4" Minimum="0" Maximum="100" 
-                             Foreground="{StaticResource AccentBlue}" Background="#333333" BorderThickness="0" VerticalAlignment="Bottom"/>
-                <TextBlock Name="txtStatus" Text="Готов к работе" HorizontalAlignment="Left" VerticalAlignment="Top" 
-                           FontSize="11" Foreground="Gray" Margin="0,-5,0,5"/>
+                <ProgressBar Name="pbStatus" Height="4" Minimum="0" Maximum="100" Foreground="{StaticResource AccentBlue}" Background="#333333" BorderThickness="0" VerticalAlignment="Bottom"/>
+                <TextBlock Name="txtStatus" Text="Готов к работе" HorizontalAlignment="Left" VerticalAlignment="Top" FontSize="11" Foreground="Gray" Margin="0,-5,0,5"/>
             </Grid>
 
         </Grid>

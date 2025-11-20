@@ -56,10 +56,8 @@ namespace RevitPlugin
                 double netWallAreaFeet = 0;
 
                 // ИСПОЛЬЗУЕМ HASHSET ДЛЯ УНИКАЛЬНОСТИ
-                // Это решает проблему, когда одна дверь считается несколько раз,
-                // если стена имеет сложную геометрию (несколько граней).
                 HashSet<ElementId> uniqueOpenings = new HashSet<ElementId>();
-                HashSet<ElementId> subtractedOpenings = new HashSet<ElementId>(); // Чтобы не вычитать площадь дважды
+                HashSet<ElementId> subtractedOpenings = new HashSet<ElementId>();
 
                 try
                 {
@@ -74,7 +72,6 @@ namespace RevitPlugin
                             Element boundaryEl = doc.GetElement(subFace.SpatialBoundaryElement.HostElementId);
                             if (boundaryEl is Wall wall)
                             {
-                                // Передаем наши коллекции для учета уникальности
                                 netWallAreaFeet += CalculateFaceAreaWithOpenings(doc, face, wall, room, uniqueOpenings, subtractedOpenings);
                             }
                         }
@@ -102,7 +99,6 @@ namespace RevitPlugin
                     RoomName = room.get_Parameter(BuiltInParameter.ROOM_NAME).AsString(),
                     RoomNumber = room.get_Parameter(BuiltInParameter.ROOM_NUMBER).AsString(),
                     Height = Math.Round(avgHeight, 2),
-                    // Теперь берем количество из уникального списка
                     OpeningsCount = uniqueOpenings.Count,
                     SkirtingLength = Math.Round(Math.Max(0, perimMeters - doorW_Meters), 2),
                     WallArea = Math.Round(Math.Max(0, wallAreaMeters), 2),
@@ -125,29 +121,67 @@ namespace RevitPlugin
 
             var openings = FindOpeningsInWall(doc, wall, room);
 
+            // ОПТИМИЗАЦИЯ: Считаем границы грани ОДИН раз для стены, а не для каждого окна
+            GetFaceZRange(face, out double faceMinZ, out double faceMaxZ);
+
             foreach (var op in openings)
             {
-                // 1. Регистрируем проем для подсчета количества (HashSet сам исключит дубликаты)
+                // 1. Считаем количество (уникальное)
                 uniqueOpeningsRegistry.Add(op.Id);
 
-                // 2. Если Revit не вычел дырку сам (hasHoles == false), вычитаем принудительно.
-                // НО! Проверяем, не вычитали ли мы этот проем уже на другой грани этой же стены.
+                // 2. Вычитаем площадь
                 if (!hasHoles && !subtractedOpeningsRegistry.Contains(op.Id))
                 {
-                    double w = GetTrueWidth(op);
-                    double h = GetTrueHeight(op);
+                    BoundingBoxXYZ opBB = op.get_BoundingBox(null);
 
-                    currentArea -= (w * h);
+                    if (opBB != null)
+                    {
+                        // УНИВЕРСАЛЬНАЯ ЛОГИКА ПЕРЕСЕЧЕНИЯ:
+                        // Работает и если окно выше потолка, и если ниже пола.
+                        // Берет только ту часть окна, которая реально попадает в диапазон Z грани стены.
 
-                    // Запоминаем, что площадь этой двери мы уже вычли
-                    subtractedOpeningsRegistry.Add(op.Id);
+                        double opMinZ = opBB.Min.Z;
+                        double opMaxZ = opBB.Max.Z;
+
+                        double bottom = Math.Max(faceMinZ, opMinZ);
+                        double top = Math.Min(faceMaxZ, opMaxZ);
+                        double overlapHeight = Math.Max(0, top - bottom);
+
+                        if (overlapHeight > 0)
+                        {
+                            double w = GetTrueWidth(op);
+                            currentArea -= (w * overlapHeight);
+
+                            subtractedOpeningsRegistry.Add(op.Id);
+                        }
+                    }
                 }
             }
 
             return Math.Max(0, currentArea);
         }
 
-        // === ЛОГИКА ПОЛУЧЕНИЯ РАЗМЕРОВ ===
+        private static void GetFaceZRange(Face face, out double minZ, out double maxZ)
+        {
+            minZ = double.MaxValue;
+            maxZ = double.MinValue;
+
+            // Используем тесселяцию для точного определения высоты грани (учитывая наклон или вырезы)
+            foreach (EdgeArray loop in face.EdgeLoops)
+            {
+                foreach (Edge e in loop)
+                {
+                    IList<XYZ> points = e.Tessellate();
+                    foreach (XYZ pt in points)
+                    {
+                        if (pt.Z < minZ) minZ = pt.Z;
+                        if (pt.Z > maxZ) maxZ = pt.Z;
+                    }
+                }
+            }
+
+            if (minZ > maxZ) { minZ = 0; maxZ = 0; }
+        }
 
         private static double GetTrueWidth(FamilyInstance fi)
         {
@@ -157,16 +191,6 @@ namespace RevitPlugin
 
             if (w < 0.01) w = GetGeometrySize(fi).X;
             return w;
-        }
-
-        private static double GetTrueHeight(FamilyInstance fi)
-        {
-            double h = GetParamValue(fi, BuiltInParameter.DOOR_HEIGHT) ??
-                       GetParamValue(fi, BuiltInParameter.WINDOW_HEIGHT) ??
-                       GetParamValue(fi, BuiltInParameter.FAMILY_ROUGH_HEIGHT_PARAM) ?? 0;
-
-            if (h < 0.01) h = GetGeometrySize(fi).Z;
-            return h;
         }
 
         private static double? GetParamValue(FamilyInstance fi, BuiltInParameter param)
@@ -192,8 +216,6 @@ namespace RevitPlugin
                 Math.Abs(bb.Max.Z - bb.Min.Z)
             );
         }
-
-        // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
 
         private static List<FamilyInstance> FindOpeningsInWall(Document doc, Wall wall, Room room)
         {
