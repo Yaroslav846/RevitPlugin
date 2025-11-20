@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Калькулятор Отделки</Name>
+    
+    <Assembly>D:\Repos\RevitPlugin\bin\Debug\net8.0-windows\RevitPlugin.dll</Assembly>
+    
+    <FullClassName>RevitPlugin.App</FullClassName>
+    
+    <AddInId>A1B2C3D4-E5F6-4789-AABB-CCDDEEFF0011</AddInId>
+    
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>My Company</VendorDescription>
+  </AddIn>
+</RevitAddIns>

@@ -18,6 +18,10 @@
     <None Remove="icon32.png" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Assets\icon16.png" />
+    <EmbeddedResource Include="Assets\icon32.png" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll</HintPath>
       <Private>False</Private>
@@ -26,9 +30,5 @@
       <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPIUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Assets\icon16.png" />
-    <EmbeddedResource Include="Assets\icon32.png" />
   </ItemGroup>
 </Project>
