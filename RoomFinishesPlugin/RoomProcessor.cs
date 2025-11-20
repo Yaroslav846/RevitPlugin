@@ -10,28 +10,21 @@ namespace RevitPlugin
     {
         public string RoomName { get; set; }
         public string RoomNumber { get; set; }
+        public string LevelName { get; set; } // НОВОЕ: Имя уровня
         public double Height { get; set; }
         public int OpeningsCount { get; set; }
         public double SkirtingLength { get; set; }
         public double WallArea { get; set; }
         public ElementId RoomId { get; set; }
 
-        // НОВОЕ: Свойство специально для сортировки
-        // Превращает "101а" -> 101, чтобы сортировалось как число
         public int SortNumber
         {
             get
             {
                 if (string.IsNullOrEmpty(RoomNumber)) return 0;
-
-                // 1. Пробуем распарсить целиком ("105")
                 if (int.TryParse(RoomNumber, out int n)) return n;
-
-                // 2. Если не вышло ("105а"), берем только первые цифры
                 var digits = new string(RoomNumber.TakeWhile(char.IsDigit).ToArray());
                 if (int.TryParse(digits, out int n2)) return n2;
-
-                // 3. Если цифр нет вообще ("Кладовая"), возвращаем 0 или код символа
                 return 0;
             }
         }
@@ -74,7 +67,6 @@ namespace RevitPlugin
 
                 // 2. Площадь стен
                 double netWallAreaFeet = 0;
-
                 HashSet<ElementId> uniqueOpenings = new HashSet<ElementId>();
                 HashSet<ElementId> subtractedOpenings = new HashSet<ElementId>();
 
@@ -117,6 +109,8 @@ namespace RevitPlugin
                 {
                     RoomName = room.get_Parameter(BuiltInParameter.ROOM_NAME).AsString(),
                     RoomNumber = room.get_Parameter(BuiltInParameter.ROOM_NUMBER).AsString(),
+                    // Получаем имя уровня
+                    LevelName = room.Level != null ? room.Level.Name : "Неизвестно",
                     Height = Math.Round(avgHeight, 2),
                     OpeningsCount = uniqueOpenings.Count,
                     SkirtingLength = Math.Round(Math.Max(0, perimMeters - doorW_Meters), 2),
@@ -128,12 +122,8 @@ namespace RevitPlugin
         }
 
         private static double CalculateFaceAreaWithOpenings(
-            Document doc,
-            Face face,
-            Wall wall,
-            Room room,
-            HashSet<ElementId> uniqueOpeningsRegistry,
-            HashSet<ElementId> subtractedOpeningsRegistry)
+            Document doc, Face face, Wall wall, Room room,
+            HashSet<ElementId> uniqueOpeningsRegistry, HashSet<ElementId> subtractedOpeningsRegistry)
         {
             double currentArea = face.Area;
             bool hasHoles = face.EdgeLoops.Size > 1;
@@ -148,12 +138,10 @@ namespace RevitPlugin
                 if (!hasHoles && !subtractedOpeningsRegistry.Contains(op.Id))
                 {
                     BoundingBoxXYZ opBB = op.get_BoundingBox(null);
-
                     if (opBB != null)
                     {
                         double opMinZ = opBB.Min.Z;
                         double opMaxZ = opBB.Max.Z;
-
                         double bottom = Math.Max(faceMinZ, opMinZ);
                         double top = Math.Min(faceMaxZ, opMaxZ);
                         double overlapHeight = Math.Max(0, top - bottom);
@@ -174,7 +162,6 @@ namespace RevitPlugin
         {
             minZ = double.MaxValue;
             maxZ = double.MinValue;
-
             foreach (EdgeArray loop in face.EdgeLoops)
             {
                 foreach (Edge e in loop)
@@ -217,11 +204,7 @@ namespace RevitPlugin
         {
             BoundingBoxXYZ bb = fi.get_BoundingBox(null);
             if (bb == null) return XYZ.Zero;
-            return new XYZ(
-                Math.Abs(bb.Max.X - bb.Min.X),
-                Math.Abs(bb.Max.Y - bb.Min.Y),
-                Math.Abs(bb.Max.Z - bb.Min.Z)
-            );
+            return new XYZ(Math.Abs(bb.Max.X - bb.Min.X), Math.Abs(bb.Max.Y - bb.Min.Y), Math.Abs(bb.Max.Z - bb.Min.Z));
         }
 
         private static List<FamilyInstance> FindOpeningsInWall(Document doc, Wall wall, Room room)
@@ -230,12 +213,10 @@ namespace RevitPlugin
                 .OfClass(typeof(FamilyInstance))
                 .WhereElementIsNotElementType()
                 .Cast<FamilyInstance>()
-                .Where(fi =>
-                    fi.Category != null && fi.Host != null && fi.Host.Id == wall.Id &&
+                .Where(fi => fi.Category != null && fi.Host != null && fi.Host.Id == wall.Id &&
                     (fi.Category.Id.Value == (long)BuiltInCategory.OST_Doors ||
                      fi.Category.Id.Value == (long)BuiltInCategory.OST_Windows))
                 .ToList();
-
             return openings.Where(fi => IsInstanceRelatedToRoom(fi, room)).ToList();
         }
 
@@ -254,7 +235,6 @@ namespace RevitPlugin
                .WhereElementIsNotElementType()
                .Cast<FamilyInstance>()
                .Where(d => IsInstanceRelatedToRoom(d, room));
-
             double width = 0;
             foreach (var d in doors) width += GetTrueWidth(d);
             return width;

@@ -7,8 +7,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data; // Важно для ICollectionView
-using System.ComponentModel; // Важно для сортировки
+using System.Windows.Controls; // Для TreeViewItem
+using System.Windows.Data;
+using System.ComponentModel;
 
 namespace RevitPlugin
 {
@@ -17,7 +18,7 @@ namespace RevitPlugin
         private Document _doc;
         private UIDocument _uidoc;
         private List<RoomData> _data;
-        private ICollectionView _roomsView; // Вид для фильтрации и сортировки
+        private ICollectionView _roomsView;
 
         private ExternalEvent _highlightEvent;
         private ExternalEvent _writeEvent;
@@ -28,7 +29,6 @@ namespace RevitPlugin
         private CalculateHandler _calculateHandler;
 
         private const string HighlightElementName = "Plugin_RoomHighlight_Temp";
-
         private bool _isClearMode = false;
 
         public RoomWindow(Document doc, UIDocument uidoc)
@@ -47,13 +47,19 @@ namespace RevitPlugin
 
             if (DataStorage.CachedRooms != null && DataStorage.CachedRooms.Count > 0)
             {
-                // Используем метод UpdateRoomData, чтобы сразу настроить поиск
                 UpdateRoomData(DataStorage.CachedRooms);
             }
         }
 
         private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => DragMove();
         private void btnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void btnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsWindow settingsWin = new SettingsWindow();
+            settingsWin.Owner = this;
+            settingsWin.ShowDialog();
+        }
 
         private void SetActionButtonsEnabled(bool enabled)
         {
@@ -102,7 +108,6 @@ namespace RevitPlugin
             _highlightEvent.Raise();
         }
 
-        // Вспомогательный метод для получения только тех комнат, что видны при поиске
         private List<RoomData> GetFilteredData()
         {
             if (_roomsView != null)
@@ -112,26 +117,47 @@ namespace RevitPlugin
             return _data;
         }
 
-        // --- НОВОЕ: ЛОГИКА ПОИСКА ---
+        // --- ЛОГИКА ФИЛЬТРАЦИИ ---
+
         private void txtSearch_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            if (_roomsView != null)
-            {
-                _roomsView.Refresh(); // Применяет фильтр заново
-            }
+            if (_roomsView != null) _roomsView.Refresh();
+        }
+
+        // НОВОЕ: Обработка выбора в дереве
+        private void tvLevels_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_roomsView != null) _roomsView.Refresh();
         }
 
         private bool FilterRooms(object item)
         {
-            if (string.IsNullOrEmpty(txtSearch.Text)) return true;
-
             var room = item as RoomData;
             if (room == null) return false;
 
-            // Ищем по имени или номеру (без учета регистра)
-            string searchText = txtSearch.Text;
-            return (room.RoomName != null && room.RoomName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                   (room.RoomNumber != null && room.RoomNumber.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0);
+            // 1. Проверка по поиску
+            bool searchMatch = true;
+            if (!string.IsNullOrEmpty(txtSearch.Text))
+            {
+                string searchText = txtSearch.Text;
+                searchMatch = (room.RoomName != null && room.RoomName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                              (room.RoomNumber != null && room.RoomNumber.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            // 2. Проверка по дереву уровней
+            bool levelMatch = true;
+            if (tvLevels.SelectedItem is TreeViewItem selectedNode)
+            {
+                // Заголовок может быть строкой или UI-элементом, приводим к строке
+                string levelName = selectedNode.Header.ToString();
+
+                if (levelName != "Все этажи")
+                {
+                    levelMatch = (room.LevelName == levelName);
+                }
+            }
+
+            return searchMatch && levelMatch;
         }
 
         public void UpdateRoomData(List<RoomData> newData)
@@ -141,9 +167,11 @@ namespace RevitPlugin
                 _data = newData;
                 DataStorage.CachedRooms = new List<RoomData>(newData);
 
-                // Создаем "Представление" (View) для таблицы, которое поддерживает фильтрацию
+                // ЗАПОЛНЕНИЕ ДЕРЕВА
+                PopulateTreeView();
+
                 _roomsView = CollectionViewSource.GetDefaultView(_data);
-                _roomsView.Filter = FilterRooms; // Подключаем наш фильтр
+                _roomsView.Filter = FilterRooms;
 
                 dgRooms.ItemsSource = _roomsView;
 
@@ -153,6 +181,27 @@ namespace RevitPlugin
                 pbStatus.Value = 100;
                 txtStatus.Text = $"Готово! Обработано комнат: {_data.Count}";
             });
+        }
+
+        private void PopulateTreeView()
+        {
+            tvLevels.Items.Clear();
+
+            // Корневой элемент
+            TreeViewItem rootItem = new TreeViewItem { Header = "Все этажи", IsExpanded = true };
+
+            // Собираем уникальные уровни
+            var levels = _data.Select(r => r.LevelName).Distinct().OrderBy(l => l).ToList();
+
+            foreach (string lvl in levels)
+            {
+                rootItem.Items.Add(new TreeViewItem { Header = lvl });
+            }
+
+            tvLevels.Items.Add(rootItem);
+
+            // Выбираем корень по умолчанию (чтобы показать все)
+            rootItem.IsSelected = true;
         }
 
         public void HighlightRooms()
@@ -177,7 +226,6 @@ namespace RevitPlugin
                     SpatialElementGeometryCalculator calculator = new SpatialElementGeometryCalculator(_doc);
                     Options wallGeomOpts = new Options { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = true };
 
-                    // ВАЖНО: Берем только отфильтрованные данные для подсветки
                     var visibleRooms = GetFilteredData();
 
                     foreach (var item in visibleRooms)

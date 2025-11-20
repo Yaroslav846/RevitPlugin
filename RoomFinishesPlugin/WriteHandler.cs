@@ -12,11 +12,6 @@ namespace RevitPlugin
     {
         private RoomWindow _window;
 
-        // Названия параметров (должны совпадать с Revit буква в букву)
-        private const string P_WALL_AREA = "Площадь стен (отделка)";
-        private const string P_SKIRT_LENGTH = "Длина плинтуса";
-        private const string P_HEIGHT = "Высота (плагин)";
-
         public WriteHandler(RoomWindow window)
         {
             _window = window;
@@ -26,6 +21,13 @@ namespace RevitPlugin
         {
             Document doc = app.ActiveUIDocument.Document;
 
+            // 1. ЗАГРУЖАЕМ НАСТРОЙКИ ПЕРЕД ЗАПИСЬЮ
+            // Чтобы использовать актуальные имена параметров
+            PluginSettings settings = PluginSettings.Load();
+            string pWallName = settings.WallAreaParam;
+            string pSkirtName = settings.SkirtingParam;
+            string pHeightName = settings.HeightParam;
+
             try
             {
                 using (Transaction t = new Transaction(doc, "Запись отделки"))
@@ -33,9 +35,7 @@ namespace RevitPlugin
                     t.Start();
                     doc.Regenerate();
 
-                    // 1. Считаем актуальные данные
                     List<RoomData> freshData = RoomProcessor.CalculateRooms(doc);
-
                     int updatedCount = 0;
                     List<string> errors = new List<string>();
 
@@ -44,22 +44,21 @@ namespace RevitPlugin
                         Room room = doc.GetElement(item.RoomId) as Room;
                         if (room == null) continue;
 
-                        // 2. Пытаемся найти параметры
-                        Parameter pWall = room.LookupParameter(P_WALL_AREA);
-                        Parameter pSkirt = room.LookupParameter(P_SKIRT_LENGTH);
-                        Parameter pHeight = room.LookupParameter(P_HEIGHT);
+                        // 2. Ищем параметры по именам из настроек
+                        Parameter pWall = room.LookupParameter(pWallName);
+                        Parameter pSkirt = room.LookupParameter(pSkirtName);
+                        Parameter pHeight = room.LookupParameter(pHeightName);
 
-                        // Если параметры не найдены - собираем ошибку и пропускаем (чтобы не спамить окнами)
-                        if (pWall == null)
+                        // Собираем ошибки (каких параметров не хватает)
+                        if (pWall == null && !string.IsNullOrWhiteSpace(pWallName))
                         {
-                            if (!errors.Contains(P_WALL_AREA)) errors.Add(P_WALL_AREA);
+                            if (!errors.Contains(pWallName)) errors.Add(pWallName);
                         }
-                        if (pSkirt == null)
+                        if (pSkirt == null && !string.IsNullOrWhiteSpace(pSkirtName))
                         {
-                            if (!errors.Contains(P_SKIRT_LENGTH)) errors.Add(P_SKIRT_LENGTH);
+                            if (!errors.Contains(pSkirtName)) errors.Add(pSkirtName);
                         }
 
-                        // 3. Записываем данные (Умная запись)
                         bool anyUpdated = false;
 
                         if (pWall != null) anyUpdated |= SetParameterValue(pWall, item.WallArea, UnitTypeId.SquareMeters);
@@ -70,54 +69,43 @@ namespace RevitPlugin
                     }
 
                     t.Commit();
-
-                    // 4. Обновляем таблицу
                     _window.UpdateRoomData(freshData);
 
-                    // 5. Отчет
                     if (errors.Count > 0)
                     {
-                        MessageBox.Show("ВНИМАНИЕ! Данные не записаны, так как в проекте не найдены параметры:\n\n" +
-                                        string.Join("\n", errors) +
-                                        "\n\nДобавьте их через: Управление -> Параметры проекта -> Для категории 'Помещения'.",
+                        MessageBox.Show("Не найдены параметры:\n" + string.Join("\n", errors) +
+                                        "\n\nПроверьте их наличие в проекте или измените имена в настройках (кнопка ⚙).",
                                         "Ошибка параметров", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                     else
                     {
-                        MessageBox.Show($"Успешно записано помещений: {updatedCount}");
+                        MessageBox.Show($"Успешно записано: {updatedCount}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Критическая ошибка: " + ex.Message);
+                MessageBox.Show("Ошибка: " + ex.Message);
                 try { _window.Dispatcher.Invoke(() => _window.UnlockUI()); } catch { }
             }
         }
 
-        // Универсальный метод записи (поддерживает и Число, и Текст)
         private bool SetParameterValue(Parameter param, double value, ForgeTypeId unitType)
         {
             if (param.IsReadOnly) return false;
 
-            // Если параметр числовой (Площадь или Длина)
             if (param.StorageType == StorageType.Double)
             {
                 double internalValue = UnitUtils.ConvertToInternalUnits(value, unitType);
                 return param.Set(internalValue);
             }
-            // Если параметр Текстовый (пользователь ошибся типом, но мы все равно запишем)
             else if (param.StorageType == StorageType.String)
             {
                 return param.Set(value.ToString("F2"));
             }
-
             return false;
         }
 
-        public string GetName()
-        {
-            return "WriteDataToRevitHandler";
-        }
+        public string GetName() => "WriteDataToRevitHandler";
     }
 }
