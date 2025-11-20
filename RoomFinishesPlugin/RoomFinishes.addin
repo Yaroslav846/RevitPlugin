@@ -3,7 +3,7 @@
   <AddIn Type="Application">
     <Name>Калькулятор Отделки</Name>
     
-    <Assembly>D:\Repos\RevitPlugin\bin\Debug\net8.0-windows\RevitPlugin.dll</Assembly>
+    <Assembly>RevitPlugin.dll</Assembly>
     
     <FullClassName>RevitPlugin.App</FullClassName>
     
