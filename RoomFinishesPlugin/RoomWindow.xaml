@@ -19,6 +19,7 @@
         <SolidColorBrush x:Key="GridHeaderBg" Color="#2D2D30"/>
         <SolidColorBrush x:Key="ScrollThumb" Color="#4E4E50"/>
         <SolidColorBrush x:Key="ScrollThumbHover" Color="#6E6E70"/>
+        <SolidColorBrush x:Key="SearchBg" Color="#333337"/>
 
         <!-- Стиль скроллбара -->
         <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
@@ -64,6 +65,34 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.3"/>
                                 <Setter Property="BorderBrush" Value="Gray"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- СТИЛЬ ПОИСКА -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SearchBg}"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="5,3"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CaretBrush" Value="{StaticResource PrimaryText}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="2">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -134,15 +163,29 @@
                 <Button Content="✕" HorizontalAlignment="Right" Click="btnClose_Click" BorderThickness="0" Foreground="Gray" FontSize="14" Width="30" Height="30"/>
             </Grid>
 
-            <!-- 1. ВЕРХНЯЯ ПАНЕЛЬ -->
+            <!-- 1. ВЕРХНЯЯ ПАНЕЛЬ (Добавлен поиск) -->
             <Border Grid.Row="1" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" Padding="10" Margin="0,0,0,15">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
+                        <!-- Кнопка Расчета -->
                         <ColumnDefinition Width="*"/>
+                        <!-- Пустота -->
+                        <ColumnDefinition Width="200"/>
+                        <!-- Поиск -->
                     </Grid.ColumnDefinitions>
+
                     <Button Name="btnCalculate" Content="Рассчитать все ⟳" Click="btnCalculate_Click" Width="150"/>
-                    <TextBlock Text="Нажмите для старта расчета" Grid.Column="1" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="Gray" FontStyle="Italic"/>
+
+                    <!-- Поле поиска -->
+                    <Grid Grid.Column="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Поиск:" VerticalAlignment="Center" Foreground="Gray" Margin="0,0,5,0"/>
+                        <TextBox x:Name="txtSearch" Grid.Column="1" TextChanged="txtSearch_TextChanged"/>
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -178,7 +221,9 @@
                 </DataGrid.Resources>
 
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="№" Binding="{Binding RoomNumber}" SortMemberPath="NumberForSorting" Width="50"/>
+                    <!-- ТЕПЕРЬ СОРТИРУЕТ ПО SortNumber (1, 2, 10), а показывает RoomNumber -->
+                    <DataGridTextColumn Header="№" Binding="{Binding RoomNumber}" SortMemberPath="SortNumber" Width="50"/>
+
                     <DataGridTextColumn Header="Имя помещения" Binding="{Binding RoomName}" SortMemberPath="RoomName" Width="*"/>
                     <DataGridTextColumn Header="Высота" Binding="{Binding Height}" SortMemberPath="Height" Width="80"/>
                     <DataGridTextColumn Header="Проемы" Binding="{Binding OpeningsCount}" SortMemberPath="OpeningsCount" Width="80">
@@ -209,7 +254,6 @@
 
             <!-- 3. КНОПКИ ДЕЙСТВИЙ -->
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,15">
-                <!-- НОВАЯ КНОПКА: Сброс 3D -->
                 <Button Name="btnClear" Content="Сброс 3D" Margin="0,0,10,0" Width="100" Height="35" Click="btnClear_Click" IsEnabled="False" BorderBrush="#666" Foreground="#CCC"/>
                 <Button Name="btnHighlight" Content="Показать в 3D" Margin="0,0,10,0" Width="140" Height="35" Click="btnHighlight_Click" IsEnabled="False"/>
                 <Button Name="btnWrite" Content="Записать в Revit" Width="140" Height="35" Click="btnWrite_Click" IsEnabled="False" Background="{StaticResource AccentBlue}" BorderThickness="0"/>

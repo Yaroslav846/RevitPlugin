@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data; // Важно для ICollectionView
+using System.ComponentModel; // Важно для сортировки
 
 namespace RevitPlugin
 {
@@ -15,6 +17,7 @@ namespace RevitPlugin
         private Document _doc;
         private UIDocument _uidoc;
         private List<RoomData> _data;
+        private ICollectionView _roomsView; // Вид для фильтрации и сортировки
 
         private ExternalEvent _highlightEvent;
         private ExternalEvent _writeEvent;
@@ -44,11 +47,8 @@ namespace RevitPlugin
 
             if (DataStorage.CachedRooms != null && DataStorage.CachedRooms.Count > 0)
             {
-                _data = DataStorage.CachedRooms;
-                dgRooms.ItemsSource = _data;
-                SetActionButtonsEnabled(true);
-                txtStatus.Text = $"Загружено: {_data.Count} комнат";
-                pbStatus.Value = 100;
+                // Используем метод UpdateRoomData, чтобы сразу настроить поиск
+                UpdateRoomData(DataStorage.CachedRooms);
             }
         }
 
@@ -91,15 +91,47 @@ namespace RevitPlugin
         private void btnHighlight_Click(object sender, RoutedEventArgs e)
         {
             _isClearMode = false;
-            if (_highlightHandler != null) _highlightHandler.RoomDataList = _data;
+            if (_highlightHandler != null) _highlightHandler.RoomDataList = GetFilteredData();
             _highlightEvent.Raise();
         }
 
         private void btnClear_Click(object sender, RoutedEventArgs e)
         {
             _isClearMode = true;
-            if (_highlightHandler != null) _highlightHandler.RoomDataList = _data;
+            if (_highlightHandler != null) _highlightHandler.RoomDataList = GetFilteredData();
             _highlightEvent.Raise();
+        }
+
+        // Вспомогательный метод для получения только тех комнат, что видны при поиске
+        private List<RoomData> GetFilteredData()
+        {
+            if (_roomsView != null)
+            {
+                return _roomsView.Cast<RoomData>().ToList();
+            }
+            return _data;
+        }
+
+        // --- НОВОЕ: ЛОГИКА ПОИСКА ---
+        private void txtSearch_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_roomsView != null)
+            {
+                _roomsView.Refresh(); // Применяет фильтр заново
+            }
+        }
+
+        private bool FilterRooms(object item)
+        {
+            if (string.IsNullOrEmpty(txtSearch.Text)) return true;
+
+            var room = item as RoomData;
+            if (room == null) return false;
+
+            // Ищем по имени или номеру (без учета регистра)
+            string searchText = txtSearch.Text;
+            return (room.RoomName != null && room.RoomName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                   (room.RoomNumber != null && room.RoomNumber.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         public void UpdateRoomData(List<RoomData> newData)
@@ -108,8 +140,13 @@ namespace RevitPlugin
             {
                 _data = newData;
                 DataStorage.CachedRooms = new List<RoomData>(newData);
-                dgRooms.ItemsSource = null;
-                dgRooms.ItemsSource = _data;
+
+                // Создаем "Представление" (View) для таблицы, которое поддерживает фильтрацию
+                _roomsView = CollectionViewSource.GetDefaultView(_data);
+                _roomsView.Filter = FilterRooms; // Подключаем наш фильтр
+
+                dgRooms.ItemsSource = _roomsView;
+
                 SetActionButtonsEnabled(true);
                 btnCalculate.IsEnabled = true;
                 pbStatus.IsIndeterminate = false;
@@ -140,7 +177,10 @@ namespace RevitPlugin
                     SpatialElementGeometryCalculator calculator = new SpatialElementGeometryCalculator(_doc);
                     Options wallGeomOpts = new Options { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = true };
 
-                    foreach (var item in _data)
+                    // ВАЖНО: Берем только отфильтрованные данные для подсветки
+                    var visibleRooms = GetFilteredData();
+
+                    foreach (var item in visibleRooms)
                     {
                         Room room = _doc.GetElement(item.RoomId) as Room;
                         if (room == null) continue;
@@ -162,7 +202,6 @@ namespace RevitPlugin
                                     {
                                         bool preciseGeoCreated = false;
 
-                                        // --- ПОПЫТКА 1: Точная геометрия (Boolean Intersect) ---
                                         try
                                         {
                                             XYZ normal = face.ComputeNormal(new UV(0.5, 0.5));
@@ -184,12 +223,9 @@ namespace RevitPlugin
                                         }
                                         catch
                                         {
-                                            // Ошибка булевой операции - игнорируем, сработает fallback
                                             preciseGeoCreated = false;
                                         }
 
-                                        // --- ПОПЫТКА 2: Резервная (Плоская сетка) ---
-                                        // Если точная геометрия не получилась, рисуем простую грань
                                         if (!preciseGeoCreated)
                                         {
                                             Mesh m = face.Triangulate();
@@ -234,8 +270,6 @@ namespace RevitPlugin
                 }
 
                 if (direction.IsZeroLength()) return null;
-
-                // Проверка на валидность петель (иногда Revit дает незамкнутые петли в Face)
                 if (loops.Count == 0 || !loops[0].IsOpen() == false) return null;
 
                 return GeometryCreationUtilities.CreateExtrusionGeometry(loops, direction, thickness);
