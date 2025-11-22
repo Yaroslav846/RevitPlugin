@@ -77,13 +77,22 @@ namespace RevitPlugin
 
                     foreach (Face face in roomSolid.Faces)
                     {
+                        var processedElements = new HashSet<ElementId>();
                         IList<SpatialElementBoundarySubface> subfaces = geomResults.GetBoundaryFaceInfo(face);
                         foreach (var subFace in subfaces)
                         {
-                            Element boundaryEl = doc.GetElement(subFace.SpatialBoundaryElement.HostElementId);
+                            var hostId = subFace.SpatialBoundaryElement.HostElementId;
+                            if (processedElements.Contains(hostId)) continue;
+                            processedElements.Add(hostId);
+
+                            Element boundaryEl = doc.GetElement(hostId);
                             if (boundaryEl is Wall wall)
                             {
                                 netWallAreaFeet += CalculateFaceAreaWithOpenings(doc, face, wall, room, uniqueOpenings, subtractedOpenings);
+                            }
+                            else if (GeometryUtils.IsColumn(boundaryEl))
+                            {
+                                netWallAreaFeet += GetColumnFaceArea(doc, face, boundaryEl as FamilyInstance, room, roomSolid);
                             }
                         }
                     }
@@ -238,6 +247,31 @@ namespace RevitPlugin
             double width = 0;
             foreach (var d in doors) width += GetTrueWidth(d);
             return width;
+        }
+
+        private static double GetColumnFaceArea(Document doc, Face columnFace, FamilyInstance column, Room room, Solid roomSolid)
+        {
+            double originalArea = columnFace.Area;
+            Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(columnFace, column, doc, roomSolid);
+
+            if (visibleSolid == null)
+            {
+                return 0;
+            }
+
+            XYZ normal = columnFace.ComputeNormal(new UV(0.5, 0.5));
+            double finalArea = 0;
+
+            foreach (Face f in visibleSolid.Faces)
+            {
+                XYZ faceNormal = f.ComputeNormal(new UV(0.5, 0.5));
+                if (faceNormal.IsAlmostEqualTo(normal))
+                {
+                    finalArea += f.Area;
+                }
+            }
+
+            return finalArea;
         }
     }
 }

@@ -242,10 +242,14 @@ namespace RevitPlugin
 
                             foreach (Face face in roomRawSolid.Faces)
                             {
+                                var processedElements = new HashSet<ElementId>();
                                 foreach (var subface in results.GetBoundaryFaceInfo(face))
                                 {
-                                    Element host = _doc.GetElement(subface.SpatialBoundaryElement.HostElementId);
+                                    var hostId = subface.SpatialBoundaryElement.HostElementId;
+                                    if (processedElements.Contains(hostId)) continue;
+                                    processedElements.Add(hostId);
 
+                                    Element host = _doc.GetElement(hostId);
                                     if (host is Wall wall)
                                     {
                                         bool preciseGeoCreated = false;
@@ -280,6 +284,14 @@ namespace RevitPlugin
                                             if (m != null) finalGeometries.Add(m);
                                         }
                                         break;
+                                    }
+                                    else if (GeometryUtils.IsColumn(host))
+                                    {
+                                        Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(face, host as FamilyInstance, _doc, roomRawSolid);
+                                        if (visibleSolid != null)
+                                        {
+                                            finalGeometries.Add(visibleSolid);
+                                        }
                                     }
                                 }
                             }
