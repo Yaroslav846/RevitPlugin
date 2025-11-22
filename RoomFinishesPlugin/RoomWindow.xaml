@@ -424,7 +424,7 @@
             <!-- 3. КНОПКИ ДЕЙСТВИЙ -->
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,15">
                 <Button Name="btnClear" Content="Сброс 3D" Margin="0,0,10,0" Width="100" Height="35" Click="btnClear_Click" IsEnabled="False" BorderBrush="#666" Foreground="#CCC"/>
-                <Button Name="btnHighlight" Content="Показать в 3D" Margin="0,0,10,0" Width="140" Height="35" Click="btnHighlight_Click" IsEnabled="False"/>
+                <Button Name="btnHighlightWithOpenings" Content="3D с проемами" Margin="0,0,10,0" Width="140" Height="35" Click="btnHighlightWithOpenings_Click" IsEnabled="False"/>
                 <Button Name="btnWrite" Content="Записать в Revit" Width="140" Height="35" Click="btnWrite_Click" IsEnabled="False" Background="{StaticResource AccentBlue}" BorderThickness="0"/>
             </StackPanel>
 

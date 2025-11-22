@@ -31,4 +31,12 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="RoomFinishesPlugin\RoomProcessor.cs" />
+    <Compile Include="RoomFinishesPlugin\RoomWindow.xaml.cs" />
+    <Compile Include="RoomFinishesPlugin\SettingsWindow.xaml.cs" />
+    <Compile Include="RoomFinishesPlugin\DataStorage.cs" />
+    <Compile Include="RoomFinishesPlugin\Handlers.cs" />
+    <Compile Include="RoomFinishesPlugin\GeometryUtils.cs" />
+  </ItemGroup>
 </Project>

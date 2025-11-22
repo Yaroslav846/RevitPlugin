@@ -63,7 +63,7 @@ namespace RevitPlugin
 
         private void SetActionButtonsEnabled(bool enabled)
         {
-            btnHighlight.IsEnabled = enabled;
+            btnHighlightWithOpenings.IsEnabled = enabled;
             btnWrite.IsEnabled = enabled;
             if (btnClear != null) btnClear.IsEnabled = enabled;
         }
@@ -94,7 +94,7 @@ namespace RevitPlugin
             _writeEvent.Raise();
         }
 
-        private void btnHighlight_Click(object sender, RoutedEventArgs e)
+        private void btnHighlightWithOpenings_Click(object sender, RoutedEventArgs e)
         {
             _isClearMode = false;
             if (_highlightHandler != null) _highlightHandler.RoomDataList = GetFilteredData();
@@ -223,9 +223,6 @@ namespace RevitPlugin
                         .Cast<FillPatternElement>().FirstOrDefault(f => f.GetFillPattern().IsSolidFill);
                     if (solidFill != null) settings.SetSurfaceForegroundPatternId(solidFill.Id);
 
-                    SpatialElementGeometryCalculator calculator = new SpatialElementGeometryCalculator(_doc);
-                    Options wallGeomOpts = new Options { DetailLevel = ViewDetailLevel.Fine, ComputeReferences = true };
-
                     var visibleRooms = GetFilteredData();
 
                     foreach (var item in visibleRooms)
@@ -233,65 +230,14 @@ namespace RevitPlugin
                         Room room = _doc.GetElement(item.RoomId) as Room;
                         if (room == null) continue;
 
-                        List<GeometryObject> finalGeometries = new List<GeometryObject>();
+                        Solid roomSolid = GeometryUtils.GetRoomSolidWithOpeningsSubtracted(room, _doc);
 
-                        try
-                        {
-                            SpatialElementGeometryResults results = calculator.CalculateSpatialElementGeometry(room);
-                            Solid roomRawSolid = results.GetGeometry();
-
-                            foreach (Face face in roomRawSolid.Faces)
-                            {
-                                foreach (var subface in results.GetBoundaryFaceInfo(face))
-                                {
-                                    Element host = _doc.GetElement(subface.SpatialBoundaryElement.HostElementId);
-
-                                    if (host is Wall wall)
-                                    {
-                                        bool preciseGeoCreated = false;
-
-                                        try
-                                        {
-                                            XYZ normal = face.ComputeNormal(new UV(0.5, 0.5));
-                                            XYZ extrudeDir = normal.Negate();
-                                            Solid roomSensorSolid = CreateExtrusion(face, extrudeDir, 0.15);
-                                            Solid wallRealSolid = GetElementSolid(wall, wallGeomOpts);
-
-                                            if (roomSensorSolid != null && wallRealSolid != null)
-                                            {
-                                                Solid intersection = BooleanOperationsUtils.ExecuteBooleanOperation(
-                                                    roomSensorSolid, wallRealSolid, BooleanOperationsType.Intersect);
-
-                                                if (intersection != null && intersection.Volume > 0)
-                                                {
-                                                    finalGeometries.Add(intersection);
-                                                    preciseGeoCreated = true;
-                                                }
-                                            }
-                                        }
-                                        catch
-                                        {
-                                            preciseGeoCreated = false;
-                                        }
-
-                                        if (!preciseGeoCreated)
-                                        {
-                                            Mesh m = face.Triangulate();
-                                            if (m != null) finalGeometries.Add(m);
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        catch { continue; }
-
-                        if (finalGeometries.Count > 0)
+                        if (roomSolid != null)
                         {
                             try
                             {
                                 DirectShape ds = DirectShape.CreateElement(_doc, new ElementId(BuiltInCategory.OST_GenericModel));
-                                ds.SetShape(finalGeometries);
+                                ds.SetShape(new List<GeometryObject> { roomSolid });
                                 ds.Name = HighlightElementName;
                                 _doc.ActiveView.SetElementOverrides(ds.Id, settings);
                             }
@@ -303,61 +249,6 @@ namespace RevitPlugin
                 t.Commit();
             }
             _uidoc.RefreshActiveView();
-        }
-
-        private Solid CreateExtrusion(Face face, XYZ direction, double thickness)
-        {
-            try
-            {
-                List<CurveLoop> loops = new List<CurveLoop>();
-                foreach (EdgeArray ea in face.EdgeLoops)
-                {
-                    CurveLoop loop = new CurveLoop();
-                    foreach (Edge e in ea) loop.Append(e.AsCurve());
-                    loops.Add(loop);
-                }
-
-                if (direction.IsZeroLength()) return null;
-                if (loops.Count == 0 || !loops[0].IsOpen() == false) return null;
-
-                return GeometryCreationUtilities.CreateExtrusionGeometry(loops, direction, thickness);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private Solid GetElementSolid(Element elem, Options opts)
-        {
-            try
-            {
-                GeometryElement geom = elem.get_Geometry(opts);
-                if (geom == null) return null;
-
-                Solid mainSolid = null;
-                double maxVolume = 0;
-
-                foreach (var obj in geom)
-                {
-                    if (obj is Solid s && s.Volume > 0)
-                    {
-                        if (s.Volume > maxVolume) { maxVolume = s.Volume; mainSolid = s; }
-                    }
-                    else if (obj is GeometryInstance gi)
-                    {
-                        foreach (var instObj in gi.GetInstanceGeometry())
-                        {
-                            if (instObj is Solid instS && instS.Volume > 0)
-                            {
-                                if (instS.Volume > maxVolume) { maxVolume = instS.Volume; mainSolid = instS; }
-                            }
-                        }
-                    }
-                }
-                return mainSolid;
-            }
-            catch { return null; }
         }
 
         private void CleanUpOldHighlights()
