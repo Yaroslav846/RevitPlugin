@@ -57,7 +57,7 @@ namespace RevitPlugin
         {
             try
             {
-                List<CurveLoop> loops = face.GetEdgesAsCurveLoops();
+                IList<CurveLoop> loops = face.GetEdgesAsCurveLoops();
                 if (loops == null || loops.Count == 0) return null;
 
                 XYZ normal = face.ComputeNormal(new UV(0.5, 0.5));
