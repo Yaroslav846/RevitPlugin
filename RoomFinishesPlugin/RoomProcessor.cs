@@ -68,7 +68,6 @@ namespace RevitPlugin
                 // 2. Площадь стен
                 double netWallAreaFeet = 0;
                 HashSet<ElementId> uniqueOpenings = new HashSet<ElementId>();
-                HashSet<ElementId> subtractedOpenings = new HashSet<ElementId>();
 
                 try
                 {
@@ -80,10 +79,14 @@ namespace RevitPlugin
                         IList<SpatialElementBoundarySubface> subfaces = geomResults.GetBoundaryFaceInfo(face);
                         foreach (var subFace in subfaces)
                         {
-                            Element boundaryEl = doc.GetElement(subFace.SpatialBoundaryElement.HostElementId);
+                            Element boundaryEl = subFace.SpatialBoundaryElement.GetHostElement();
                             if (boundaryEl is Wall wall)
                             {
-                                netWallAreaFeet += CalculateFaceAreaWithOpenings(doc, face, wall, room, uniqueOpenings, subtractedOpenings);
+                                netWallAreaFeet += CalculateWallArea(doc, subFace, wall, room, uniqueOpenings);
+                            }
+                            else if (GeometryUtils.IsColumn(boundaryEl))
+                            {
+                                netWallAreaFeet += GetColumnFaceArea(doc, subFace, boundaryEl as FamilyInstance, room, roomSolid);
                             }
                         }
                     }
@@ -121,60 +124,46 @@ namespace RevitPlugin
             return results;
         }
 
-        private static double CalculateFaceAreaWithOpenings(
-            Document doc, Face face, Wall wall, Room room,
-            HashSet<ElementId> uniqueOpeningsRegistry, HashSet<ElementId> subtractedOpeningsRegistry)
+        private static double CalculateWallArea(Document doc, SpatialElementBoundarySubface subFace, Wall wall, Room room, HashSet<ElementId> uniqueOpeningsRegistry)
         {
-            double currentArea = face.Area;
-            bool hasHoles = face.EdgeLoops.Size > 1;
+            Face subfaceFace = subFace.GetSubface();
+            if (subfaceFace == null || subfaceFace.Area < 1e-6) return 0;
 
-            var openings = FindOpeningsInWall(doc, wall, room);
-            GetFaceZRange(face, out double faceMinZ, out double faceMaxZ);
+            XYZ normal = subfaceFace.ComputeNormal(new UV(0.5, 0.5));
+            Solid subfaceSolid = GeometryCreationUtilities.CreateExtrusionGeometry(
+                subfaceFace.GetEdgesAsCurveLoops(), normal, 1.0);
 
+            var openings = GeometryUtils.FindOpeningsInWall(doc, wall, room);
             foreach (var op in openings)
             {
                 uniqueOpeningsRegistry.Add(op.Id);
-
-                if (!hasHoles && !subtractedOpeningsRegistry.Contains(op.Id))
+                Solid openingSolid = GeometryUtils.GetElementSolid(op);
+                if (openingSolid != null)
                 {
-                    BoundingBoxXYZ opBB = op.get_BoundingBox(null);
-                    if (opBB != null)
+                    try
                     {
-                        double opMinZ = opBB.Min.Z;
-                        double opMaxZ = opBB.Max.Z;
-                        double bottom = Math.Max(faceMinZ, opMinZ);
-                        double top = Math.Min(faceMaxZ, opMaxZ);
-                        double overlapHeight = Math.Max(0, top - bottom);
-
-                        if (overlapHeight > 0)
-                        {
-                            double w = GetTrueWidth(op);
-                            currentArea -= (w * overlapHeight);
-                            subtractedOpeningsRegistry.Add(op.Id);
-                        }
+                        subfaceSolid = BooleanOperationsUtils.ExecuteBooleanOperation(subfaceSolid, openingSolid, BooleanOperationsType.Difference);
                     }
+                    catch { }
                 }
             }
-            return Math.Max(0, currentArea);
-        }
 
-        private static void GetFaceZRange(Face face, out double minZ, out double maxZ)
-        {
-            minZ = double.MaxValue;
-            maxZ = double.MinValue;
-            foreach (EdgeArray loop in face.EdgeLoops)
+            if (subfaceSolid == null) return 0;
+
+            double finalArea = 0;
+            foreach (Face f in subfaceSolid.Faces)
             {
-                foreach (Edge e in loop)
+                try
                 {
-                    IList<XYZ> points = e.Tessellate();
-                    foreach (XYZ pt in points)
+                    XYZ faceNormal = f.ComputeNormal(new UV(0.5, 0.5));
+                    if (faceNormal.IsAlmostEqualTo(normal))
                     {
-                        if (pt.Z < minZ) minZ = pt.Z;
-                        if (pt.Z > maxZ) maxZ = pt.Z;
+                        finalArea += f.Area;
                     }
                 }
+                catch { }
             }
-            if (minZ > maxZ) { minZ = 0; maxZ = 0; }
+            return finalArea;
         }
 
         private static double GetTrueWidth(FamilyInstance fi)
@@ -207,26 +196,6 @@ namespace RevitPlugin
             return new XYZ(Math.Abs(bb.Max.X - bb.Min.X), Math.Abs(bb.Max.Y - bb.Min.Y), Math.Abs(bb.Max.Z - bb.Min.Z));
         }
 
-        private static List<FamilyInstance> FindOpeningsInWall(Document doc, Wall wall, Room room)
-        {
-            var openings = new FilteredElementCollector(doc)
-                .OfClass(typeof(FamilyInstance))
-                .WhereElementIsNotElementType()
-                .Cast<FamilyInstance>()
-                .Where(fi => fi.Category != null && fi.Host != null && fi.Host.Id == wall.Id &&
-                    (fi.Category.Id.Value == (long)BuiltInCategory.OST_Doors ||
-                     fi.Category.Id.Value == (long)BuiltInCategory.OST_Windows))
-                .ToList();
-            return openings.Where(fi => IsInstanceRelatedToRoom(fi, room)).ToList();
-        }
-
-        private static bool IsInstanceRelatedToRoom(FamilyInstance fi, Room room)
-        {
-            if (fi.Room?.Id == room.Id) return true;
-            if (fi.FromRoom?.Id == room.Id) return true;
-            if (fi.ToRoom?.Id == room.Id) return true;
-            return false;
-        }
 
         private static double GetDoorsTotalWidth(Document doc, Room room)
         {
@@ -238,6 +207,32 @@ namespace RevitPlugin
             double width = 0;
             foreach (var d in doors) width += GetTrueWidth(d);
             return width;
+        }
+
+        private static double GetColumnFaceArea(Document doc, SpatialElementBoundarySubface subFace, FamilyInstance column, Room room, Solid roomSolid)
+        {
+            Face subfaceFace = subFace.GetSubface();
+            if (subfaceFace == null || subfaceFace.Area < 1e-6) return 0;
+
+            Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(subfaceFace, column, doc, roomSolid);
+            if (visibleSolid == null) return 0;
+
+            XYZ normal = subfaceFace.ComputeNormal(new UV(0.5, 0.5));
+            double finalArea = 0;
+
+            foreach (Face f in visibleSolid.Faces)
+            {
+                try
+                {
+                    XYZ faceNormal = f.ComputeNormal(new UV(0.5, 0.5));
+                    if (faceNormal.IsAlmostEqualTo(normal))
+                    {
+                        finalArea += f.Area;
+                    }
+                }
+                catch { }
+            }
+            return finalArea;
         }
     }
 }
