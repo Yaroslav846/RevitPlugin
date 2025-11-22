@@ -87,7 +87,7 @@ namespace RevitPlugin
                             }
                             else if (GeometryUtils.IsColumn(boundaryEl))
                             {
-                                netWallAreaFeet += GetColumnFaceArea(doc, face, boundaryEl as FamilyInstance, room);
+                                netWallAreaFeet += GetColumnFaceArea(doc, face, boundaryEl as FamilyInstance, room, roomSolid);
                             }
                         }
                     }
@@ -244,10 +244,10 @@ namespace RevitPlugin
             return width;
         }
 
-        private static double GetColumnFaceArea(Document doc, Face columnFace, FamilyInstance column, Room room)
+        private static double GetColumnFaceArea(Document doc, Face columnFace, FamilyInstance column, Room room, Solid roomSolid)
         {
             double originalArea = columnFace.Area;
-            Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(columnFace, column, doc);
+            Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(columnFace, column, doc, roomSolid);
 
             if (visibleSolid == null)
             {

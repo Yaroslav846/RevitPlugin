@@ -283,7 +283,7 @@ namespace RevitPlugin
                                     }
                                     else if (GeometryUtils.IsColumn(host))
                                     {
-                                        Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(face, host as FamilyInstance, _doc);
+                                        Solid visibleSolid = GeometryUtils.GetVisibleColumnSolid(face, host as FamilyInstance, _doc, roomRawSolid);
                                         if (visibleSolid != null)
                                         {
                                             finalGeometries.Add(visibleSolid);

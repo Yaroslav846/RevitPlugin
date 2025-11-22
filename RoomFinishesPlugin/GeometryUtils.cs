@@ -16,7 +16,7 @@ namespace RevitPlugin
             return false;
         }
 
-        public static Solid GetVisibleColumnSolid(Face columnFace, FamilyInstance column, Document doc)
+        public static Solid GetVisibleColumnSolid(Face columnFace, FamilyInstance column, Document doc, Solid roomSolid)
         {
             Solid columnFaceSolid = CreateSingleSideExtrusion(columnFace, 0.1);
             if (columnFaceSolid == null || columnFaceSolid.Volume < 1.0E-9)
@@ -24,7 +24,7 @@ namespace RevitPlugin
                 return null;
             }
 
-            var intersectingWalls = GetIntersectingWalls(column, doc);
+            var intersectingWalls = GetIntersectingWalls(column, doc, roomSolid);
             Solid finalSolid = columnFaceSolid;
             Options geomOptions = new Options { DetailLevel = ViewDetailLevel.Fine };
 
@@ -71,19 +71,37 @@ namespace RevitPlugin
             }
         }
 
-        private static List<Wall> GetIntersectingWalls(FamilyInstance column, Document doc)
+        private static List<Wall> GetIntersectingWalls(FamilyInstance column, Document doc, Solid roomSolid)
         {
             var columnBox = column.get_BoundingBox(null);
             if (columnBox == null) return new List<Wall>();
 
             var filter = new BoundingBoxIntersectsFilter(new Outline(columnBox.Min, columnBox.Max));
 
-            return new FilteredElementCollector(doc)
+            var candidateWalls = new FilteredElementCollector(doc)
                 .OfClass(typeof(Wall))
                 .WhereElementIsNotElementType()
                 .WherePasses(filter)
                 .Cast<Wall>()
                 .ToList();
+
+            var finalWalls = new List<Wall>();
+            foreach (var wall in candidateWalls)
+            {
+                Solid wallSolid = GetElementSolid(wall);
+                if (wallSolid == null) continue;
+
+                try
+                {
+                    var intersection = BooleanOperationsUtils.ExecuteBooleanOperation(wallSolid, roomSolid, BooleanOperationsType.Intersect);
+                    if (intersection != null && intersection.Volume > 1e-9)
+                    {
+                        finalWalls.Add(wall);
+                    }
+                }
+                catch { }
+            }
+            return finalWalls;
         }
 
         public static Solid GetElementSolid(Element elem, Options opts = null)
