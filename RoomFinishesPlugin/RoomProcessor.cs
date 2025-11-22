@@ -77,10 +77,15 @@ namespace RevitPlugin
 
                     foreach (Face face in roomSolid.Faces)
                     {
+                        var processedElements = new HashSet<ElementId>();
                         IList<SpatialElementBoundarySubface> subfaces = geomResults.GetBoundaryFaceInfo(face);
                         foreach (var subFace in subfaces)
                         {
-                            Element boundaryEl = doc.GetElement(subFace.SpatialBoundaryElement.HostElementId);
+                            var hostId = subFace.SpatialBoundaryElement.HostElementId;
+                            if (processedElements.Contains(hostId)) continue;
+                            processedElements.Add(hostId);
+
+                            Element boundaryEl = doc.GetElement(hostId);
                             if (boundaryEl is Wall wall)
                             {
                                 netWallAreaFeet += CalculateFaceAreaWithOpenings(doc, face, wall, room, uniqueOpenings, subtractedOpenings);
